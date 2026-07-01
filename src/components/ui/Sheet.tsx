@@ -41,7 +41,7 @@ export function Sheet({
               </h2>
               <button
                 onClick={onClose}
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-black/5 text-[var(--tg-hint)] dark:bg-white/10"
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--tg-separator)] text-[var(--tg-hint)]"
               >
                 <X size={18} />
               </button>

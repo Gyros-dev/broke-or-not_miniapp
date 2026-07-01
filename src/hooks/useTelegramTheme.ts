@@ -3,13 +3,34 @@ import { tg } from '../telegram/webapp';
 
 export type ColorScheme = 'light' | 'dark';
 
+// @twa-dev/sdk always installs window.Telegram.WebApp, even outside real
+// Telegram (standalone browser access), so `tg` alone can't tell us whether
+// we're actually running inside the Telegram client. Real clients populate
+// themeParams with actual colors; a standalone/polyfilled context leaves it
+// empty — that's the signal we use to decide whether to trust tg.colorScheme
+// or fall back to the browser's own prefers-color-scheme.
+export function hasRealTelegramContext(): boolean {
+  const params = tg?.themeParams;
+  return !!params && Object.keys(params).length > 0;
+}
+
+function prefersDarkMedia(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    !!window.matchMedia?.('(prefers-color-scheme: dark)').matches
+  );
+}
+
 function applyThemeParams(accentColor?: string): ColorScheme {
   const root = document.documentElement;
-  const prefersDark =
-    typeof window !== 'undefined' &&
-    window.matchMedia?.('(prefers-color-scheme: dark)').matches;
-  const scheme: ColorScheme =
-    tg?.colorScheme === 'dark' || (!tg && prefersDark) ? 'dark' : 'light';
+  const inTelegram = hasRealTelegramContext();
+  const scheme: ColorScheme = inTelegram
+    ? tg?.colorScheme === 'dark'
+      ? 'dark'
+      : 'light'
+    : prefersDarkMedia()
+      ? 'dark'
+      : 'light';
   root.classList.toggle('theme-dark', scheme === 'dark');
 
   root.style.removeProperty('--tg-button');
@@ -53,14 +74,21 @@ export function useTelegramTheme(accentColor?: string): ColorScheme {
 
   useEffect(() => {
     const webApp = tg;
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const onMediaChange = () => {
+      if (!hasRealTelegramContext()) setScheme(applyThemeParams(accentRef.current));
+    };
+    media.addEventListener('change', onMediaChange);
+
     if (webApp && typeof webApp.onEvent === 'function') {
       const onThemeChanged = () => setScheme(applyThemeParams(accentRef.current));
       webApp.onEvent('themeChanged', onThemeChanged);
-      return () => webApp.offEvent?.('themeChanged', onThemeChanged);
+      return () => {
+        webApp.offEvent?.('themeChanged', onThemeChanged);
+        media.removeEventListener('change', onMediaChange);
+      };
     }
-    const media = window.matchMedia('(prefers-color-scheme: dark)');
-    const onMediaChange = () => setScheme(applyThemeParams(accentRef.current));
-    media.addEventListener('change', onMediaChange);
+
     return () => media.removeEventListener('change', onMediaChange);
   }, []);
 

@@ -1,6 +1,6 @@
 import { Ban, Download, Moon, Sun } from 'lucide-react';
 import { useData } from '../context/DataContext';
-import { useTelegramTheme } from '../hooks/useTelegramTheme';
+import { hasRealTelegramContext, useTelegramTheme } from '../hooks/useTelegramTheme';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
 import { Card } from '../components/ui/Card';
 import { COMMON_CURRENCIES } from '../services/currency';
@@ -11,6 +11,7 @@ export function SettingsScreen() {
   const { settings, setBaseCurrency, setAccentColor, exportData, accounts, expenses } =
     useData();
   const scheme = useTelegramTheme(settings.accentColor);
+  const themeSource = hasRealTelegramContext() ? 'Telegram' : 'системой устройства';
 
   const handleExport = () => {
     haptic('medium');
@@ -62,7 +63,7 @@ export function SettingsScreen() {
               <Sun size={18} color="var(--tg-hint)" />
             )}
             <p className="text-[15px] text-[var(--tg-text)]">
-              Тема синхронизирована с Telegram ({scheme === 'dark' ? 'тёмная' : 'светлая'})
+              Тема управляется {themeSource} ({scheme === 'dark' ? 'тёмная' : 'светлая'})
             </p>
           </div>
 
