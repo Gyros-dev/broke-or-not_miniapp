@@ -1,10 +1,9 @@
-import { Ban, CloudOff, CloudUpload, Download, Moon, Sun } from 'lucide-react';
+import { Ban, Download, Moon, Sun } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useTelegramTheme } from '../hooks/useTelegramTheme';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
 import { Card } from '../components/ui/Card';
 import { COMMON_CURRENCIES } from '../services/currency';
-import { isCloudSyncAvailable } from '../services/storage';
 import { ACCOUNT_COLORS } from '../constants';
 import { haptic } from '../telegram/webapp';
 
@@ -12,7 +11,6 @@ export function SettingsScreen() {
   const { settings, setBaseCurrency, setAccentColor, exportData, accounts, expenses } =
     useData();
   const scheme = useTelegramTheme(settings.accentColor);
-  const cloudSyncAvailable = isCloudSyncAvailable();
 
   const handleExport = () => {
     haptic('medium');
@@ -104,19 +102,7 @@ export function SettingsScreen() {
           Данные
         </h2>
         <Card className="p-4">
-          <div className="flex items-center gap-3">
-            {cloudSyncAvailable ? (
-              <CloudUpload size={18} color="#34c759" />
-            ) : (
-              <CloudOff size={18} color="#ff9500" />
-            )}
-            <p className="text-[13px] text-[var(--tg-text)]">
-              {cloudSyncAvailable
-                ? 'Синхронизация между устройствами включена'
-                : 'Синхронизация недоступна — обновите Telegram'}
-            </p>
-          </div>
-          <p className="mt-3 text-[13px] text-[var(--tg-hint)]">
+          <p className="text-[13px] text-[var(--tg-hint)]">
             Счетов: {accounts.length} · Расходов: {expenses.length}
           </p>
           <button

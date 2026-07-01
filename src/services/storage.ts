@@ -29,16 +29,11 @@ function splitIntoChunks(value: string, maxBytes: number): string[] {
   return chunks;
 }
 
-// CloudStorage появился в Bot API 6.9 — на более старых клиентах Telegram
-// (нередко это Telegram Desktop, если он давно не обновлялся) сам объект
-// может существовать, но любой вызов бросает WebAppMethodUnsupported.
+// Наличие window.Telegram.WebApp.CloudStorage не гарантирует, что вызовы
+// реально сработают на конкретном клиенте — это лишь быстрая проверка перед
+// попыткой. Каждый вызов ниже всё равно защищён try/catch на случай отказа.
 function cloudStorageAvailable(): boolean {
-  if (!tg?.CloudStorage) return false;
-  try {
-    return tg.isVersionAtLeast('6.9');
-  } catch {
-    return false;
-  }
+  return !!tg?.CloudStorage;
 }
 
 // Методы CloudStorage могут не только вернуть ошибку через callback, но и

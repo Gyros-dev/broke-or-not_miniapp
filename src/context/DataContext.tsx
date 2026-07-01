@@ -95,24 +95,58 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [rates, setRates] = useState<ExchangeRates | null>(null);
 
+  const loadAllFromStorage = useCallback(async () => {
+    const [a, e, t, c, s] = await Promise.all([
+      loadJson(KEYS.accounts, [] as Account[]),
+      loadJson(KEYS.expenses, [] as ExpenseItem[]),
+      loadJson(KEYS.transactions, [] as Transaction[]),
+      loadJson(KEYS.categories, DEFAULT_CATEGORIES),
+      loadJson(KEYS.settings, DEFAULT_SETTINGS),
+    ]);
+    setAccounts(a);
+    setExpenses(e);
+    setTransactions(t);
+    setCategories(c);
+    setSettings(s);
+  }, []);
+
   useEffect(() => {
     (async () => {
       await storage.syncFromCloud(Object.values(KEYS));
-      const [a, e, t, c, s] = await Promise.all([
-        loadJson(KEYS.accounts, [] as Account[]),
-        loadJson(KEYS.expenses, [] as ExpenseItem[]),
-        loadJson(KEYS.transactions, [] as Transaction[]),
-        loadJson(KEYS.categories, DEFAULT_CATEGORIES),
-        loadJson(KEYS.settings, DEFAULT_SETTINGS),
-      ]);
-      setAccounts(a);
-      setExpenses(e);
-      setTransactions(t);
-      setCategories(c);
-      setSettings(s);
+      await loadAllFromStorage();
       setLoading(false);
     })();
-  }, []);
+  }, [loadAllFromStorage]);
+
+  // Telegram CloudStorage не умеет пушить изменения в реальном времени, поэтому
+  // кросс-платформенная синхронизация приближена опросом: подтягиваем свежие
+  // данные при возврате в приложение (открыли на другом устройстве и вернулись)
+  // и периодически, пока приложение открыто и видимо на экране.
+  useEffect(() => {
+    let cancelled = false;
+
+    const refresh = async () => {
+      await storage.syncFromCloud(Object.values(KEYS));
+      if (!cancelled) await loadAllFromStorage();
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('focus', refresh);
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') refresh();
+    }, 15000);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('focus', refresh);
+      window.clearInterval(interval);
+    };
+  }, [loadAllFromStorage]);
 
   useEffect(() => {
     let cancelled = false;

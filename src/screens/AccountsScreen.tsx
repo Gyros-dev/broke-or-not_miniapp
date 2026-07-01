@@ -28,7 +28,7 @@ function AccountForm({
 }) {
   const [name, setName] = useState(initial?.name ?? '');
   const [currency, setCurrency] = useState(initial?.currency ?? 'USD');
-  const [balance, setBalance] = useState(String(initial?.balance ?? 0));
+  const [balance, setBalance] = useState(initial ? String(initial.balance) : '');
   const [icon, setIcon] = useState(initial?.icon ?? ACCOUNT_ICONS[0]);
   const [color, setColor] = useState(initial?.color ?? ACCOUNT_COLORS[0]);
 

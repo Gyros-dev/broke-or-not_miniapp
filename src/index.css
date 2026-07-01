@@ -52,3 +52,15 @@ body {
 ::-webkit-scrollbar {
   display: none;
 }
+
+/*
+  iOS Safari/WKWebView auto-zooms the whole page when a focused input's
+  font-size is under 16px, and the viewport doesn't reliably reset after
+  the keyboard closes. Forcing 16px on all form fields prevents that,
+  regardless of the Tailwind text-size class each field happens to use.
+*/
+input,
+select,
+textarea {
+  font-size: 16px !important;
+}
