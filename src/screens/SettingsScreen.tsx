@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AlertTriangle, Ban, CheckCircle2, Download, Moon, RotateCcw, Sun, XCircle } from 'lucide-react';
+import { AlertTriangle, Ban, BookOpen, CheckCircle2, Download, Moon, RotateCcw, Sun, XCircle } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { hasRealTelegramContext, useTelegramTheme } from '../hooks/useTelegramTheme';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
@@ -10,7 +10,7 @@ import { runCloudDiagnostics, type CloudDiagnostics } from '../services/storage'
 import { ACCOUNT_COLORS } from '../constants';
 import { confirmAction, haptic, hapticNotification } from '../telegram/webapp';
 
-export function SettingsScreen() {
+export function SettingsScreen({ onOpenGuide }: { onOpenGuide: () => void }) {
   const {
     settings,
     setBaseCurrency,
@@ -134,6 +134,24 @@ export function SettingsScreen() {
               </button>
             </div>
           </div>
+        </Card>
+      </div>
+
+      <div className="mx-4 mt-6">
+        <h2 className="mb-2 text-[13px] font-semibold uppercase tracking-wide text-[var(--tg-hint)]">
+          Помощь
+        </h2>
+        <Card className="p-2">
+          <button
+            onClick={() => {
+              haptic('light');
+              onOpenGuide();
+            }}
+            className="flex w-full items-center gap-3 rounded-[12px] px-3 py-2.5 text-left active:opacity-60"
+          >
+            <BookOpen size={18} color="var(--tg-button)" />
+            <span className="text-[15px] text-[var(--tg-text)]">Как пользоваться</span>
+          </button>
         </Card>
       </div>
 

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ListChecks, Pencil, Plus, Search, X } from 'lucide-react';
+import { ListChecks, Plus, Search, X } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
 import { Card } from '../components/ui/Card';
@@ -436,16 +436,6 @@ export function ExpensesScreen() {
                       </p>
                       <StatusBadge status={status} />
                     </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEditing(expense);
-                        setSheetOpen(true);
-                      }}
-                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[var(--tg-hint)] active:opacity-60"
-                    >
-                      <Pencil size={16} />
-                    </button>
                   </Card>
                 </SwipeableRow>
               );
