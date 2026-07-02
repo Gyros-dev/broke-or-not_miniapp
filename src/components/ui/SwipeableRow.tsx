@@ -1,21 +1,30 @@
 import { motion, useAnimation, type PanInfo } from 'framer-motion';
 import type { ReactNode } from 'react';
-import { Pencil, Trash2 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { haptic } from '../../telegram/webapp';
 
 const ACTION_WIDTH = 72;
 
+export interface SwipeAction {
+  key: string;
+  label: string;
+  icon: LucideIcon;
+  /** Цвет фона кнопки действия (CSS-переменная или hex). */
+  bg: string;
+  /** Цвет иконки и подписи, по умолчанию белый. */
+  color?: string;
+  onClick: () => void;
+}
+
 export function SwipeableRow({
   children,
-  onEdit,
-  onDelete,
+  actions,
 }: {
   children: ReactNode;
-  onEdit?: () => void;
-  onDelete: () => void;
+  actions: SwipeAction[];
 }) {
   const controls = useAnimation();
-  const revealWidth = onEdit ? ACTION_WIDTH * 2 : ACTION_WIDTH;
+  const revealWidth = ACTION_WIDTH * actions.length;
 
   const handleDragEnd = (
     _e: MouseEvent | TouchEvent | PointerEvent,
@@ -32,31 +41,23 @@ export function SwipeableRow({
   return (
     <div className="relative overflow-hidden rounded-[18px]">
       <div className="absolute inset-y-0 right-0 flex">
-        {onEdit && (
+        {actions.map((action) => (
           <button
+            key={action.key}
             onClick={() => {
               haptic('medium');
               controls.start({ x: 0 });
-              onEdit();
+              action.onClick();
             }}
-            style={{ width: ACTION_WIDTH }}
-            className="flex flex-col items-center justify-center gap-1 bg-[var(--tg-hint)] text-white"
+            style={{ width: ACTION_WIDTH, background: action.bg, color: action.color ?? '#fff' }}
+            className="flex flex-col items-center justify-center gap-1"
           >
-            <Pencil size={18} />
-            <span className="text-[11px]">Изменить</span>
+            <action.icon size={18} />
+            <span className="px-1 text-center text-[11px] leading-tight">
+              {action.label}
+            </span>
           </button>
-        )}
-        <button
-          onClick={() => {
-            haptic('medium');
-            onDelete();
-          }}
-          style={{ width: ACTION_WIDTH }}
-          className="flex flex-col items-center justify-center gap-1 bg-[var(--tg-destructive)] text-white"
-        >
-          <Trash2 size={18} />
-          <span className="text-[11px]">Удалить</span>
-        </button>
+        ))}
       </div>
       <motion.div
         drag="x"

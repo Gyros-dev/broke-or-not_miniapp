@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ListChecks, Plus, Search, X } from 'lucide-react';
+import { Check, ListChecks, Pencil, Plus, Search, Trash2, Undo2, X } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
 import { Card } from '../components/ui/Card';
@@ -441,20 +441,42 @@ export function ExpensesScreen() {
               return (
                 <SwipeableRow
                   key={expense.id}
-                  onEdit={() => {
-                    setEditing(expense);
-                    setSheetOpen(true);
-                  }}
-                  onDelete={() => deleteExpense(expense.id)}
+                  actions={[
+                    status === 'paid'
+                      ? {
+                          key: 'unpay',
+                          label: 'Отменить',
+                          icon: Undo2,
+                          bg: '#ff9500',
+                          onClick: () => revertExpensePayment(expense.id),
+                        }
+                      : {
+                          key: 'pay',
+                          label: 'Оплатить',
+                          icon: Check,
+                          bg: '#34c759',
+                          onClick: () => markExpensePaid(expense.id),
+                        },
+                    {
+                      key: 'edit',
+                      label: 'Изменить',
+                      icon: Pencil,
+                      bg: 'var(--tg-hint)',
+                      onClick: () => {
+                        setEditing(expense);
+                        setSheetOpen(true);
+                      },
+                    },
+                    {
+                      key: 'delete',
+                      label: 'Удалить',
+                      icon: Trash2,
+                      bg: 'var(--tg-destructive)',
+                      onClick: () => deleteExpense(expense.id),
+                    },
+                  ]}
                 >
-                  <Card
-                    className="flex items-center gap-3 p-4"
-                    onClick={() =>
-                      status === 'paid'
-                        ? revertExpensePayment(expense.id)
-                        : markExpensePaid(expense.id)
-                    }
-                  >
+                  <Card className="flex items-center gap-3 p-4">
                     <div
                       className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
                       style={{ background: `${category?.color}22`, color: category?.color }}

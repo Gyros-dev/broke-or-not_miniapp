@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Wallet } from 'lucide-react';
+import { Pencil, Plus, Trash2, Wallet } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
 import { Card } from '../components/ui/Card';
@@ -186,11 +186,25 @@ export function AccountsScreen({
           {accounts.map((account) => (
             <SwipeableRow
               key={account.id}
-              onEdit={() => {
-                setEditing(account);
-                setSheetOpen(true);
-              }}
-              onDelete={() => deleteAccount(account.id)}
+              actions={[
+                {
+                  key: 'edit',
+                  label: 'Изменить',
+                  icon: Pencil,
+                  bg: 'var(--tg-hint)',
+                  onClick: () => {
+                    setEditing(account);
+                    setSheetOpen(true);
+                  },
+                },
+                {
+                  key: 'delete',
+                  label: 'Удалить',
+                  icon: Trash2,
+                  bg: 'var(--tg-destructive)',
+                  onClick: () => deleteAccount(account.id),
+                },
+              ]}
             >
               <Card
                 className="flex items-center gap-3 p-4"
@@ -243,8 +257,8 @@ export function AccountsScreen({
         {adjusting && (
           <BalanceAdjustForm
             account={adjusting}
-            onSubmit={async (delta, note, type) => {
-              await adjustBalance(adjusting.id, delta, note, type);
+            onSubmit={async (delta, note) => {
+              await adjustBalance(adjusting.id, delta, note);
               setAdjusting(null);
             }}
           />
@@ -254,18 +268,16 @@ export function AccountsScreen({
   );
 }
 
-type BalanceMode = 'income' | 'expense' | 'set';
+type BalanceMode = 'income' | 'expense';
 
 const BALANCE_MODE_LABELS: Record<BalanceMode, string> = {
   income: 'Пополнение',
   expense: 'Списание',
-  set: 'Изменить',
 };
 
 const BALANCE_MODE_COLORS: Record<BalanceMode, string> = {
   income: '#34c759',
   expense: '#ff3b30',
-  set: '#007aff',
 };
 
 function BalanceAdjustForm({
@@ -273,19 +285,15 @@ function BalanceAdjustForm({
   onSubmit,
 }: {
   account: Account;
-  onSubmit: (delta: number, note?: string, type?: 'adjustment') => void;
+  onSubmit: (delta: number, note?: string) => void;
 }) {
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const [mode, setMode] = useState<BalanceMode>('income');
 
   const handleSubmit = () => {
-    const value = Number(amount);
-    if (mode === 'set') {
-      onSubmit(value - account.balance, note || undefined, 'adjustment');
-    } else {
-      onSubmit(mode === 'income' ? Math.abs(value) : -Math.abs(value), note || undefined);
-    }
+    const value = Math.abs(Number(amount));
+    onSubmit(mode === 'income' ? value : -value, note || undefined);
   };
 
   return (
@@ -296,9 +304,7 @@ function BalanceAdjustForm({
         autoFocus
         value={amount}
         onChange={(e) => setAmount(e.target.value)}
-        placeholder={
-          mode === 'set' ? `Новый баланс в ${account.currency}` : `Сумма в ${account.currency}`
-        }
+        placeholder={`Сумма в ${account.currency}`}
         className="w-full rounded-[12px] bg-[var(--tg-bg)] px-3 py-2.5 text-[15px] text-[var(--tg-text)] outline-none"
       />
       <div className="flex gap-2">
@@ -316,11 +322,6 @@ function BalanceAdjustForm({
           </button>
         ))}
       </div>
-      {mode === 'set' && (
-        <p className="text-[12px] text-[var(--tg-hint)]">
-          Текущий баланс: {formatMoney(account.balance, account.currency)}
-        </p>
-      )}
       <input
         value={note}
         onChange={(e) => setNote(e.target.value)}
