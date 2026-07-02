@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { storage } from '../services/storage';
+import { storage, resetAllData as resetAllDataInStorage } from '../services/storage';
 import { getExchangeRates, convertAmount } from '../services/currency';
 import { DEFAULT_CATEGORIES } from '../constants';
 import type {
@@ -82,6 +82,7 @@ interface DataContextValue {
   setAccentColor: (color?: string) => Promise<void>;
   convert: (amount: number, from: string, to?: string) => number;
   exportData: () => string;
+  resetAllData: () => Promise<void>;
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
@@ -398,6 +399,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
     );
   }, [accounts, expenses, transactions, categories, settings]);
 
+  const resetAllData: DataContextValue['resetAllData'] = useCallback(async () => {
+    await resetAllDataInStorage(Object.values(KEYS));
+    setAccounts([]);
+    setExpenses([]);
+    setTransactions([]);
+    setCategories(DEFAULT_CATEGORIES);
+    setSettings(DEFAULT_SETTINGS);
+  }, []);
+
   const value = useMemo<DataContextValue>(
     () => ({
       loading,
@@ -425,6 +435,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setAccentColor,
       convert,
       exportData,
+      resetAllData,
     }),
     [
       loading,
@@ -452,6 +463,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setAccentColor,
       convert,
       exportData,
+      resetAllData,
     ],
   );
 

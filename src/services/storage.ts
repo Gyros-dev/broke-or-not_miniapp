@@ -216,3 +216,100 @@ export const storage = {
 export function isCloudSyncAvailable(): boolean {
   return cloudStorageAvailable();
 }
+
+/** Полностью удаляет локальные и облачные данные по заданным ключам (для сброса приложения). */
+export async function resetAllData(keys: string[]): Promise<void> {
+  for (const key of keys) {
+    localStorage.removeItem(key);
+  }
+  if (!cloudStorageAvailable()) return;
+  for (const key of keys) {
+    try {
+      await cloudRemoveItem(key);
+      await cloudRemoveOldChunks(key, 0);
+    } catch (err) {
+      console.error('[storage] resetAllData failed for', key, err);
+    }
+  }
+}
+
+export interface CloudDiagnostics {
+  hasWebApp: boolean;
+  hasCloudStorageObject: boolean;
+  platform: string;
+  version: string;
+  colorScheme: string;
+  themeParamsKeys: number;
+  cloudKeysCount: number | null;
+  cloudKeysError: string | null;
+  roundTripOk: boolean | null;
+  roundTripError: string | null;
+}
+
+function describeError(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * Живая проверка CloudStorage "на месте": не полагается на то, что уже
+ * известно о клиенте, а реально пытается записать и прочитать тестовое
+ * значение, чтобы увидеть точную причину сбоя синхронизации на конкретном
+ * устройстве.
+ */
+export async function runCloudDiagnostics(): Promise<CloudDiagnostics> {
+  const result: CloudDiagnostics = {
+    hasWebApp: !!tg,
+    hasCloudStorageObject: !!tg?.CloudStorage,
+    platform: tg?.platform ?? 'неизвестно',
+    version: tg?.version ?? 'неизвестно',
+    colorScheme: tg?.colorScheme ?? 'неизвестно',
+    themeParamsKeys: tg?.themeParams ? Object.keys(tg.themeParams).length : 0,
+    cloudKeysCount: null,
+    cloudKeysError: null,
+    roundTripOk: null,
+    roundTripError: null,
+  };
+
+  if (!result.hasCloudStorageObject) return result;
+
+  try {
+    const keys = await new Promise<string[]>((resolve, reject) => {
+      tg!.CloudStorage.getKeys((err, keys) =>
+        err ? reject(new Error(err)) : resolve(keys ?? []),
+      );
+    });
+    result.cloudKeysCount = keys.length;
+  } catch (err) {
+    result.cloudKeysError = describeError(err);
+  }
+
+  try {
+    const testKey = '__diag_test__';
+    const testValue = String(Date.now());
+    const wrote = await new Promise<boolean>((resolve, reject) => {
+      tg!.CloudStorage.setItem(testKey, testValue, (err, ok) =>
+        err ? reject(new Error(err)) : resolve(!!ok),
+      );
+    });
+    if (!wrote) throw new Error('setItem вернул ok=false без текста ошибки');
+
+    const readBack = await new Promise<string | undefined>((resolve, reject) => {
+      tg!.CloudStorage.getItem(testKey, (err, value) =>
+        err ? reject(new Error(err)) : resolve(value),
+      );
+    });
+    result.roundTripOk = readBack === testValue;
+    if (!result.roundTripOk) {
+      result.roundTripError = `записали "${testValue}", прочитали "${readBack}"`;
+    }
+
+    await new Promise<void>((resolve) => {
+      tg!.CloudStorage.removeItem(testKey, () => resolve());
+    });
+  } catch (err) {
+    result.roundTripOk = false;
+    result.roundTripError = describeError(err);
+  }
+
+  return result;
+}

@@ -35,3 +35,18 @@ export function hapticNotification(type: 'error' | 'success' | 'warning') {
 export function hapticSelection() {
   tg?.HapticFeedback?.selectionChanged?.();
 }
+
+/** Диалог подтверждения через Telegram (если доступен) с откатом на window.confirm. */
+export function confirmAction(message: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (tg && typeof tg.showConfirm === 'function') {
+      try {
+        tg.showConfirm(message, (confirmed) => resolve(!!confirmed));
+        return;
+      } catch {
+        // откатываемся на window.confirm ниже
+      }
+    }
+    resolve(window.confirm(message));
+  });
+}

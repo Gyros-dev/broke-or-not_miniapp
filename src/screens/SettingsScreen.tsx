@@ -1,17 +1,31 @@
-import { Ban, Download, Moon, Sun } from 'lucide-react';
+import { useState } from 'react';
+import { AlertTriangle, Ban, CheckCircle2, Download, Moon, RotateCcw, Sun, XCircle } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { hasRealTelegramContext, useTelegramTheme } from '../hooks/useTelegramTheme';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
 import { Card } from '../components/ui/Card';
+import { Button } from '../components/ui/Button';
 import { COMMON_CURRENCIES } from '../services/currency';
+import { runCloudDiagnostics, type CloudDiagnostics } from '../services/storage';
 import { ACCOUNT_COLORS } from '../constants';
-import { haptic } from '../telegram/webapp';
+import { confirmAction, haptic, hapticNotification } from '../telegram/webapp';
 
 export function SettingsScreen() {
-  const { settings, setBaseCurrency, setAccentColor, exportData, accounts, expenses } =
-    useData();
+  const {
+    settings,
+    setBaseCurrency,
+    setAccentColor,
+    exportData,
+    resetAllData,
+    accounts,
+    expenses,
+  } = useData();
   const scheme = useTelegramTheme(settings.accentColor);
   const themeSource = hasRealTelegramContext() ? 'Telegram' : 'системой устройства';
+
+  const [diagnostics, setDiagnostics] = useState<CloudDiagnostics | null>(null);
+  const [diagnosticsLoading, setDiagnosticsLoading] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   const handleExport = () => {
     haptic('medium');
@@ -23,6 +37,31 @@ export function SettingsScreen() {
     a.download = `budget-export-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleRunDiagnostics = async () => {
+    haptic('light');
+    setDiagnosticsLoading(true);
+    try {
+      const result = await runCloudDiagnostics();
+      setDiagnostics(result);
+    } finally {
+      setDiagnosticsLoading(false);
+    }
+  };
+
+  const handleReset = async () => {
+    const confirmed = await confirmAction(
+      'Удалить все счета, расходы и транзакции на этом устройстве и в облаке? Это необратимо.',
+    );
+    if (!confirmed) return;
+    setResetting(true);
+    try {
+      await resetAllData();
+      hapticNotification('success');
+    } finally {
+      setResetting(false);
+    }
   };
 
   return (
@@ -113,8 +152,89 @@ export function SettingsScreen() {
             <Download size={16} />
             Экспортировать в JSON
           </button>
+          <Button
+            variant="destructive"
+            disabled={resetting}
+            onClick={handleReset}
+            className="mt-2 flex w-full items-center justify-center gap-2"
+          >
+            <RotateCcw size={16} />
+            {resetting ? 'Сброс...' : 'Сбросить все данные'}
+          </Button>
         </Card>
       </div>
+
+      <div className="mx-4 mt-6">
+        <h2 className="mb-2 text-[13px] font-semibold uppercase tracking-wide text-[var(--tg-hint)]">
+          Синхронизация
+        </h2>
+        <Card className="p-4">
+          <p className="text-[13px] text-[var(--tg-hint)]">
+            Живая проверка записи и чтения через Telegram CloudStorage прямо на этом
+            устройстве — покажет точную причину, если синхронизация не работает.
+          </p>
+          <Button
+            variant="secondary"
+            disabled={diagnosticsLoading}
+            onClick={handleRunDiagnostics}
+            className="mt-3 w-full"
+          >
+            {diagnosticsLoading ? 'Проверяю...' : 'Проверить синхронизацию'}
+          </Button>
+
+          {diagnostics && (
+            <div className="mt-4 flex flex-col gap-2 border-t border-[var(--tg-separator)] pt-4 text-[13px]">
+              <DiagnosticRow label="Платформа" value={diagnostics.platform} />
+              <DiagnosticRow label="Версия Telegram" value={diagnostics.version} />
+              <DiagnosticRow
+                label="CloudStorage объект"
+                value={diagnostics.hasCloudStorageObject ? 'есть' : 'нет'}
+                ok={diagnostics.hasCloudStorageObject}
+              />
+              <DiagnosticRow
+                label="Ключей в облаке"
+                value={
+                  diagnostics.cloudKeysError
+                    ? `ошибка: ${diagnostics.cloudKeysError}`
+                    : String(diagnostics.cloudKeysCount ?? '—')
+                }
+                ok={diagnostics.cloudKeysError ? false : diagnostics.cloudKeysCount !== null}
+              />
+              <DiagnosticRow
+                label="Тестовая запись/чтение"
+                value={
+                  diagnostics.roundTripOk
+                    ? 'успешно'
+                    : diagnostics.roundTripError ?? 'не выполнено'
+                }
+                ok={diagnostics.roundTripOk ?? undefined}
+              />
+            </div>
+          )}
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function DiagnosticRow({
+  label,
+  value,
+  ok,
+}: {
+  label: string;
+  value: string;
+  ok?: boolean;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <span className="text-[var(--tg-hint)]">{label}</span>
+      <span className="flex items-center gap-1.5 text-right text-[var(--tg-text)]">
+        {ok === true && <CheckCircle2 size={14} color="#34c759" className="shrink-0" />}
+        {ok === false && <XCircle size={14} color="#ff3b30" className="shrink-0" />}
+        {ok === undefined && <AlertTriangle size={14} color="#ff9500" className="shrink-0" />}
+        {value}
+      </span>
     </div>
   );
 }
