@@ -111,13 +111,28 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setSettings(s);
   }, []);
 
+  // Данные, созданные до того как CloudStorage заработал (или на устройстве,
+  // где он был недоступен), лежат только в localStorage и никогда не
+  // попадали в облако — persistX пишет туда только при НОВЫХ изменениях, а
+  // не при обычной загрузке. Один раз при старте досылаем то, что уже есть
+  // локально, чтобы другие устройства тоже это увидели.
+  const pushLocalToCloud = useCallback(async () => {
+    for (const key of Object.values(KEYS)) {
+      const raw = localStorage.getItem(key);
+      if (raw !== null) {
+        await storage.setItem(key, raw);
+      }
+    }
+  }, []);
+
   useEffect(() => {
     (async () => {
       await storage.syncFromCloud(Object.values(KEYS));
       await loadAllFromStorage();
+      await pushLocalToCloud();
       setLoading(false);
     })();
-  }, [loadAllFromStorage]);
+  }, [loadAllFromStorage, pushLocalToCloud]);
 
   // Telegram CloudStorage не умеет пушить изменения в реальном времени, поэтому
   // кросс-платформенная синхронизация приближена опросом: подтягиваем свежие
