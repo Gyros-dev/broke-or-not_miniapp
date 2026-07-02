@@ -25,8 +25,19 @@ const RECURRENCE_LABELS: Record<Recurrence, string> = {
   monthly: 'Ежемесячно',
   weekly: 'Еженедельно',
   yearly: 'Ежегодно',
+  interval: 'Каждые N месяцев',
   custom: 'Произвольная дата',
 };
+
+const INTERVAL_MONTH_OPTIONS = [2, 3, 6, 12, 18, 24];
+
+/** Подпись периодичности для списка: для интервала — с конкретным N. */
+function recurrenceLabel(expense: ExpenseItem): string {
+  if (expense.recurrence === 'interval' && expense.intervalMonths) {
+    return `Каждые ${expense.intervalMonths} мес.`;
+  }
+  return RECURRENCE_LABELS[expense.recurrence];
+}
 
 function ExpenseForm({
   initial,
@@ -47,6 +58,9 @@ function ExpenseForm({
   const [dueDate, setDueDate] = useState(
     initial?.dueDate?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
   );
+  const [intervalMonths, setIntervalMonths] = useState(
+    String(initial?.intervalMonths ?? 3),
+  );
   const [accountId, setAccountId] = useState(initial?.accountId ?? accounts[0]?.id ?? '');
   const [addingCategory, setAddingCategory] = useState(false);
 
@@ -60,7 +74,12 @@ function ExpenseForm({
   };
 
   const needsDueDay = recurrence === 'monthly' || recurrence === 'weekly';
-  const needsDueDate = recurrence === 'once' || recurrence === 'custom' || recurrence === 'yearly';
+  const isInterval = recurrence === 'interval';
+  const needsDueDate =
+    recurrence === 'once' ||
+    recurrence === 'custom' ||
+    recurrence === 'yearly' ||
+    isInterval;
 
   return (
     <div className="flex flex-col gap-4">
@@ -181,10 +200,29 @@ function ExpenseForm({
             </div>
           )}
 
+          {isInterval && (
+            <div>
+              <label className="mb-1 block text-[13px] font-medium text-[var(--tg-hint)]">
+                Интервал
+              </label>
+              <select
+                value={intervalMonths}
+                onChange={(e) => setIntervalMonths(e.target.value)}
+                className="w-full rounded-[12px] bg-[var(--tg-bg)] px-3 py-2.5 text-[15px] text-[var(--tg-text)] outline-none"
+              >
+                {INTERVAL_MONTH_OPTIONS.map((n) => (
+                  <option key={n} value={n}>
+                    Каждые {n} мес.
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {needsDueDate && (
             <div>
               <label className="mb-1 block text-[13px] font-medium text-[var(--tg-hint)]">
-                Дата платежа
+                {isInterval ? 'Дата первого платежа' : 'Дата платежа'}
               </label>
               <input
                 type="date"
@@ -225,6 +263,7 @@ function ExpenseForm({
                 recurrence,
                 dueDay: needsDueDay ? Number(dueDay) : undefined,
                 dueDate: needsDueDate ? new Date(dueDate).toISOString() : undefined,
+                intervalMonths: isInterval ? Number(intervalMonths) : undefined,
                 accountId: accountId || undefined,
               })
             }
@@ -427,7 +466,7 @@ export function ExpensesScreen() {
                         {expense.title}
                       </p>
                       <p className="text-[12px] text-[var(--tg-hint)]">
-                        {RECURRENCE_LABELS[expense.recurrence]}
+                        {recurrenceLabel(expense)}
                       </p>
                     </div>
                     <div className="text-right">

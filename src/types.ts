@@ -1,4 +1,10 @@
-export type Recurrence = 'once' | 'monthly' | 'weekly' | 'yearly' | 'custom';
+export type Recurrence =
+  | 'once'
+  | 'monthly'
+  | 'weekly'
+  | 'yearly'
+  | 'interval'
+  | 'custom';
 
 export type ExpenseStatus = 'paid' | 'pending' | 'overdue';
 
@@ -23,6 +29,8 @@ export interface ExpenseItem {
   recurrence: Recurrence;
   dueDay?: number;
   dueDate?: string;
+  /** Интервал в месяцах для recurrence === 'interval' (2, 3, 6, 12, 18, 24). */
+  intervalMonths?: number;
   accountId?: string;
   createdAt: string;
   lastPaidAt?: string;
