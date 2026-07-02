@@ -1,9 +1,17 @@
-import WebApp from '@twa-dev/sdk';
+import type { WebApp as WebAppType } from '@twa-dev/types';
 
-export const tg: typeof WebApp | null = (() => {
+// Читаем window.Telegram.WebApp напрямую, а не через @twa-dev/sdk: этот
+// пакет при импорте безусловно создаёт СВОЮ копию window.Telegram.WebApp,
+// затирая настоящий мост, который уже внедрил клиент Telegram. Из-за этого
+// платформа/версия/CloudStorage переставали быть доступны даже внутри
+// настоящего Telegram — приложение говорило с собственной пустой заглушкой
+// вместо реального моста. Скрипт telegram-web-app.js в index.html сам
+// корректно определяет, есть ли настоящий мост, и создаёт заглушку только
+// если его действительно нет (например, при открытии в обычном браузере).
+export const tg: WebAppType | null = (() => {
   try {
     if (typeof window !== 'undefined' && window.Telegram?.WebApp) {
-      return WebApp;
+      return window.Telegram.WebApp;
     }
   } catch {
     // не в среде Telegram
