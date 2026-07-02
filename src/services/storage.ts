@@ -97,6 +97,22 @@ function cloudGetKeys(): Promise<string[]> {
   });
 }
 
+/** Забирает несколько ключей одним запросом вместо N отдельных round-trip'ов. */
+function cloudGetItems(keys: string[]): Promise<Record<string, string>> {
+  if (keys.length === 0) return Promise.resolve({});
+  return new Promise((resolve) => {
+    try {
+      tg!.CloudStorage.getItems(keys, (err, values) => {
+        if (err) console.error('[CloudStorage] getItems failed', keys, err);
+        resolve(err || !values ? {} : values);
+      });
+    } catch (err) {
+      console.error('[CloudStorage] getItems threw', keys, err);
+      resolve({});
+    }
+  });
+}
+
 /** Читает значение из CloudStorage, прозрачно собирая его из частей, если оно было разбито. */
 async function cloudRead(key: string): Promise<string | null> {
   const meta = await cloudGetItem(`${key}${META_KEY_SUFFIX}`);
@@ -117,7 +133,13 @@ async function cloudRead(key: string): Promise<string | null> {
 async function cloudWrite(key: string, value: string): Promise<boolean> {
   if (byteLength(value) <= CLOUD_MAX_VALUE_BYTES) {
     const ok = await cloudSetItem(key, value);
-    await cloudRemoveOldChunks(key, 0);
+    // Убираем только meta-ключ (если значение раньше было разбито на части,
+    // иначе cloudRead ошибочно продолжит собирать его из старых частей).
+    // Сами старые части не сканируем построчно — это лишние round-trip'ы
+    // на каждой обычной записи ради редкого случая, когда большое значение
+    // вдруг уменьшилось; несколько неиспользуемых ключей не страшны при
+    // лимите в 1024 ключа.
+    await cloudRemoveItem(`${key}${META_KEY_SUFFIX}`);
     return ok;
   }
 
@@ -195,14 +217,27 @@ export const storage = {
     if (!cloudStorageAvailable()) return;
     try {
       const availableKeys = await cloudGetKeys();
-      for (const key of keys) {
-        const hasPlainKey = availableKeys.includes(key);
-        const hasChunkedKey = availableKeys.includes(`${key}${META_KEY_SUFFIX}`);
-        if (!hasPlainKey && !hasChunkedKey) continue;
-        const cloudValue = await cloudRead(key);
-        if (cloudValue !== null) {
-          localStorage.setItem(key, cloudValue);
-        }
+      const plainKeys = keys.filter((key) => availableKeys.includes(key));
+      const chunkedKeys = keys.filter((key) =>
+        availableKeys.includes(`${key}${META_KEY_SUFFIX}`),
+      );
+
+      // Обычные (не разбитые на части) ключи забираем одним batched-запросом
+      // вместо отдельного round-trip'а на каждый — так синхронизация не
+      // упирается в задержку сети N раз подряд при каждом открытии.
+      const [plainValues] = await Promise.all([
+        cloudGetItems(plainKeys),
+        Promise.all(
+          chunkedKeys.map(async (key) => {
+            const cloudValue = await cloudRead(key);
+            if (cloudValue !== null) {
+              localStorage.setItem(key, cloudValue);
+            }
+          }),
+        ),
+      ]);
+      for (const [key, value] of Object.entries(plainValues)) {
+        if (value) localStorage.setItem(key, value);
       }
     } catch (err) {
       console.error('[storage] syncFromCloud failed', err);

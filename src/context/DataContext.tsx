@@ -117,20 +117,29 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // не при обычной загрузке. Один раз при старте досылаем то, что уже есть
   // локально, чтобы другие устройства тоже это увидели.
   const pushLocalToCloud = useCallback(async () => {
-    for (const key of Object.values(KEYS)) {
-      const raw = localStorage.getItem(key);
-      if (raw !== null) {
-        await storage.setItem(key, raw);
-      }
-    }
+    await Promise.all(
+      Object.values(KEYS).map(async (key) => {
+        const raw = localStorage.getItem(key);
+        if (raw !== null) {
+          await storage.setItem(key, raw);
+        }
+      }),
+    );
   }, []);
 
+  // Локальные данные показываем сразу, не дожидаясь сети — CloudStorage
+  // может отвечать медленно, и блокировать первый рендер на нём не стоит.
+  // Синхронизация с облаком (подтянуть свежее + досослать локальное)
+  // происходит следом, в фоне, и обновляет экран, когда действительно есть
+  // что обновлять.
   useEffect(() => {
     (async () => {
+      await loadAllFromStorage();
+      setLoading(false);
+
       await storage.syncFromCloud(Object.values(KEYS));
       await loadAllFromStorage();
       await pushLocalToCloud();
-      setLoading(false);
     })();
   }, [loadAllFromStorage, pushLocalToCloud]);
 
