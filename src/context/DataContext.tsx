@@ -4,11 +4,13 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
 import { storage, resetAllData as resetAllDataInStorage } from '../services/storage';
 import { getExchangeRates, convertAmount } from '../services/currency';
+import { computeExpenseStatus } from '../utils/expenseStatus';
 import { DEFAULT_CATEGORIES } from '../constants';
 import type {
   Account,
@@ -96,6 +98,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [rates, setRates] = useState<ExchangeRates | null>(null);
 
+  // Рефы держат самое свежее состояние и обновляются синхронно при каждой
+  // записи (persistX ниже). Мутаторы читают из рефов, а не из замыкания
+  // useState — иначе при быстрых повторных нажатиях (напр. оплатить/отменить)
+  // несколько обработчиков видели бы один и тот же устаревший снимок и
+  // затирали изменения друг друга, из-за чего баланс расходился.
+  const accountsRef = useRef<Account[]>([]);
+  const expensesRef = useRef<ExpenseItem[]>([]);
+  const transactionsRef = useRef<Transaction[]>([]);
+  const categoriesRef = useRef<Category[]>(DEFAULT_CATEGORIES);
+  const settingsRef = useRef<AppSettings>(DEFAULT_SETTINGS);
+
   const loadAllFromStorage = useCallback(async () => {
     const [a, e, t, c, s] = await Promise.all([
       loadJson(KEYS.accounts, [] as Account[]),
@@ -104,6 +117,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
       loadJson(KEYS.categories, DEFAULT_CATEGORIES),
       loadJson(KEYS.settings, DEFAULT_SETTINGS),
     ]);
+    accountsRef.current = a;
+    expensesRef.current = e;
+    transactionsRef.current = t;
+    categoriesRef.current = c;
+    settingsRef.current = s;
     setAccounts(a);
     setExpenses(e);
     setTransactions(t);
@@ -183,24 +201,38 @@ export function DataProvider({ children }: { children: ReactNode }) {
     };
   }, [settings.baseCurrency]);
 
-  const persistAccounts = useCallback(async (next: Account[]) => {
+  // persistX — единственные писатели: синхронно обновляют реф (источник
+  // истины для чтения в мутаторах), затем состояние для рендера, затем
+  // отправляют снимок в storage. Обновление рефа ДО setState гарантирует,
+  // что следующий вызов (даже в том же кадре) увидит уже свежие данные.
+  const persistAccounts = useCallback((next: Account[]) => {
+    accountsRef.current = next;
     setAccounts(next);
-    await storage.setItem(KEYS.accounts, JSON.stringify(next));
+    return storage.setItem(KEYS.accounts, JSON.stringify(next));
   }, []);
 
-  const persistExpenses = useCallback(async (next: ExpenseItem[]) => {
+  const persistExpenses = useCallback((next: ExpenseItem[]) => {
+    expensesRef.current = next;
     setExpenses(next);
-    await storage.setItem(KEYS.expenses, JSON.stringify(next));
+    return storage.setItem(KEYS.expenses, JSON.stringify(next));
   }, []);
 
-  const persistTransactions = useCallback(async (next: Transaction[]) => {
+  const persistTransactions = useCallback((next: Transaction[]) => {
+    transactionsRef.current = next;
     setTransactions(next);
-    await storage.setItem(KEYS.transactions, JSON.stringify(next));
+    return storage.setItem(KEYS.transactions, JSON.stringify(next));
   }, []);
 
-  const persistSettings = useCallback(async (next: AppSettings) => {
+  const persistSettings = useCallback((next: AppSettings) => {
+    settingsRef.current = next;
     setSettings(next);
-    await storage.setItem(KEYS.settings, JSON.stringify(next));
+    return storage.setItem(KEYS.settings, JSON.stringify(next));
+  }, []);
+
+  const persistCategories = useCallback((next: Category[]) => {
+    categoriesRef.current = next;
+    setCategories(next);
+    return storage.setItem(KEYS.categories, JSON.stringify(next));
   }, []);
 
   const addAccount: DataContextValue['addAccount'] = useCallback(
@@ -210,35 +242,35 @@ export function DataProvider({ children }: { children: ReactNode }) {
         id: uid(),
         createdAt: new Date().toISOString(),
       };
-      await persistAccounts([...accounts, account]);
+      await persistAccounts([...accountsRef.current, account]);
       return account;
     },
-    [accounts, persistAccounts],
+    [persistAccounts],
   );
 
   const updateAccount: DataContextValue['updateAccount'] = useCallback(
     async (id, patch) => {
       await persistAccounts(
-        accounts.map((a) => (a.id === id ? { ...a, ...patch } : a)),
+        accountsRef.current.map((a) => (a.id === id ? { ...a, ...patch } : a)),
       );
     },
-    [accounts, persistAccounts],
+    [persistAccounts],
   );
 
   const deleteAccount: DataContextValue['deleteAccount'] = useCallback(
     async (id) => {
-      await persistAccounts(accounts.filter((a) => a.id !== id));
+      await persistAccounts(accountsRef.current.filter((a) => a.id !== id));
     },
-    [accounts, persistAccounts],
+    [persistAccounts],
   );
 
   const adjustBalance: DataContextValue['adjustBalance'] = useCallback(
     async (accountId, delta, note, type) => {
       if (delta === 0) return;
-      const account = accounts.find((a) => a.id === accountId);
+      const account = accountsRef.current.find((a) => a.id === accountId);
       if (!account) return;
       await persistAccounts(
-        accounts.map((a) =>
+        accountsRef.current.map((a) =>
           a.id === accountId ? { ...a, balance: a.balance + delta } : a,
         ),
       );
@@ -251,39 +283,34 @@ export function DataProvider({ children }: { children: ReactNode }) {
         date: new Date().toISOString(),
         note: note ?? 'Корректировка баланса',
       };
-      await persistTransactions([tx, ...transactions]);
+      await persistTransactions([tx, ...transactionsRef.current]);
     },
-    [accounts, transactions, persistAccounts, persistTransactions],
+    [persistAccounts, persistTransactions],
   );
-
-  const persistCategories = useCallback(async (next: Category[]) => {
-    setCategories(next);
-    await storage.setItem(KEYS.categories, JSON.stringify(next));
-  }, []);
 
   const addCategory: DataContextValue['addCategory'] = useCallback(
     async (input) => {
       const category: Category = { ...input, id: uid() };
-      await persistCategories([...categories, category]);
+      await persistCategories([...categoriesRef.current, category]);
       return category;
     },
-    [categories, persistCategories],
+    [persistCategories],
   );
 
   const updateCategory: DataContextValue['updateCategory'] = useCallback(
     async (id, patch) => {
       await persistCategories(
-        categories.map((c) => (c.id === id ? { ...c, ...patch } : c)),
+        categoriesRef.current.map((c) => (c.id === id ? { ...c, ...patch } : c)),
       );
     },
-    [categories, persistCategories],
+    [persistCategories],
   );
 
   const deleteCategory: DataContextValue['deleteCategory'] = useCallback(
     async (id) => {
-      await persistCategories(categories.filter((c) => c.id !== id));
+      await persistCategories(categoriesRef.current.filter((c) => c.id !== id));
     },
-    [categories, persistCategories],
+    [persistCategories],
   );
 
   const addExpense: DataContextValue['addExpense'] = useCallback(
@@ -293,120 +320,136 @@ export function DataProvider({ children }: { children: ReactNode }) {
         id: uid(),
         createdAt: new Date().toISOString(),
       };
-      await persistExpenses([...expenses, expense]);
+      await persistExpenses([...expensesRef.current, expense]);
       return expense;
     },
-    [expenses, persistExpenses],
+    [persistExpenses],
   );
 
   const updateExpense: DataContextValue['updateExpense'] = useCallback(
     async (id, patch) => {
       await persistExpenses(
-        expenses.map((e) => (e.id === id ? { ...e, ...patch } : e)),
+        expensesRef.current.map((e) => (e.id === id ? { ...e, ...patch } : e)),
       );
     },
-    [expenses, persistExpenses],
+    [persistExpenses],
   );
 
   const deleteExpense: DataContextValue['deleteExpense'] = useCallback(
     async (id) => {
-      await persistExpenses(expenses.filter((e) => e.id !== id));
+      // Удаляем только определение расхода. Уже совершённые платежи
+      // (транзакции и списанный баланс) — это факт истории, его не трогаем.
+      await persistExpenses(expensesRef.current.filter((e) => e.id !== id));
     },
-    [expenses, persistExpenses],
+    [persistExpenses],
   );
 
   const markExpensePaid: DataContextValue['markExpensePaid'] = useCallback(
     async (id, accountId) => {
-      const expense = expenses.find((e) => e.id === id);
+      const expense = expensesRef.current.find((e) => e.id === id);
       if (!expense) return;
+      // Идемпотентность: если уже оплачено за текущий период — ничего не
+      // делаем. Защищает от двойного списания при быстрых повторных тапах.
+      if (computeExpenseStatus(expense) === 'paid') return;
+
       const now = new Date().toISOString();
       await persistExpenses(
-        expenses.map((e) => (e.id === id ? { ...e, lastPaidAt: now } : e)),
+        expensesRef.current.map((e) =>
+          e.id === id ? { ...e, lastPaidAt: now } : e,
+        ),
       );
       const targetAccountId = accountId ?? expense.accountId;
-      if (targetAccountId) {
-        const account = accounts.find((a) => a.id === targetAccountId);
-        if (account) {
-          await persistAccounts(
-            accounts.map((a) =>
-              a.id === targetAccountId
-                ? { ...a, balance: a.balance - expense.amount }
-                : a,
-            ),
-          );
-          const tx: Transaction = {
-            id: uid(),
-            accountId: targetAccountId,
-            amount: expense.amount,
-            currency: expense.currency,
-            type: 'expense',
-            category: expense.category,
-            date: now,
-            note: expense.title,
-            linkedExpenseId: expense.id,
-          };
-          await persistTransactions([tx, ...transactions]);
-        }
-      }
+      if (!targetAccountId) return;
+      const account = accountsRef.current.find((a) => a.id === targetAccountId);
+      if (!account) return;
+
+      await persistAccounts(
+        accountsRef.current.map((a) =>
+          a.id === targetAccountId
+            ? { ...a, balance: a.balance - expense.amount }
+            : a,
+        ),
+      );
+      const tx: Transaction = {
+        id: uid(),
+        accountId: targetAccountId,
+        amount: expense.amount,
+        currency: expense.currency,
+        type: 'expense',
+        category: expense.category,
+        date: now,
+        note: expense.title,
+        linkedExpenseId: expense.id,
+      };
+      await persistTransactions([tx, ...transactionsRef.current]);
     },
-    [expenses, accounts, transactions, persistExpenses, persistAccounts, persistTransactions],
+    [persistExpenses, persistAccounts, persistTransactions],
   );
 
   const revertExpensePayment: DataContextValue['revertExpensePayment'] = useCallback(
     async (id) => {
-      const expense = expenses.find((e) => e.id === id);
-      if (!expense || !expense.lastPaidAt) return;
+      const expense = expensesRef.current.find((e) => e.id === id);
+      // Идемпотентность: откатывать нечего, если сейчас не «оплачено».
+      if (!expense || computeExpenseStatus(expense) !== 'paid') return;
 
-      await persistExpenses(
-        expenses.map((e) => (e.id === id ? { ...e, lastPaidAt: undefined } : e)),
-      );
-
-      const linkedTx = [...transactions]
+      const linkedTx = transactionsRef.current
         .filter((t) => t.linkedExpenseId === id)
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+
+      await persistExpenses(
+        expensesRef.current.map((e) =>
+          e.id === id ? { ...e, lastPaidAt: undefined } : e,
+        ),
+      );
       if (!linkedTx) return;
 
-      const account = accounts.find((a) => a.id === linkedTx.accountId);
+      const account = accountsRef.current.find((a) => a.id === linkedTx.accountId);
       if (account) {
         await persistAccounts(
-          accounts.map((a) =>
-            a.id === linkedTx.accountId ? { ...a, balance: a.balance + linkedTx.amount } : a,
+          accountsRef.current.map((a) =>
+            a.id === linkedTx.accountId
+              ? { ...a, balance: a.balance + linkedTx.amount }
+              : a,
           ),
         );
       }
-      await persistTransactions(transactions.filter((t) => t.id !== linkedTx.id));
+      await persistTransactions(
+        transactionsRef.current.filter((t) => t.id !== linkedTx.id),
+      );
     },
-    [expenses, accounts, transactions, persistExpenses, persistAccounts, persistTransactions],
+    [persistExpenses, persistAccounts, persistTransactions],
   );
 
   const addTransaction: DataContextValue['addTransaction'] = useCallback(
     async (input) => {
       const tx: Transaction = { ...input, id: uid() };
-      await persistTransactions([tx, ...transactions]);
+      await persistTransactions([tx, ...transactionsRef.current]);
       return tx;
     },
-    [transactions, persistTransactions],
+    [persistTransactions],
   );
 
   const deleteTransaction: DataContextValue['deleteTransaction'] = useCallback(
     async (id) => {
-      await persistTransactions(transactions.filter((t) => t.id !== id));
+      await persistTransactions(
+        transactionsRef.current.filter((t) => t.id !== id),
+      );
     },
-    [transactions, persistTransactions],
+    [persistTransactions],
   );
 
   const setBaseCurrency: DataContextValue['setBaseCurrency'] = useCallback(
     async (currency) => {
-      await persistSettings({ ...settings, baseCurrency: currency });
+      await persistSettings({ ...settingsRef.current, baseCurrency: currency });
     },
-    [settings, persistSettings],
+    [persistSettings],
   );
 
   const setAccentColor: DataContextValue['setAccentColor'] = useCallback(
     async (color) => {
-      await persistSettings({ ...settings, accentColor: color });
+      await persistSettings({ ...settingsRef.current, accentColor: color });
     },
-    [settings, persistSettings],
+    [persistSettings],
   );
 
   const convert = useCallback(
@@ -425,6 +468,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const resetAllData: DataContextValue['resetAllData'] = useCallback(async () => {
     await resetAllDataInStorage(Object.values(KEYS));
+    accountsRef.current = [];
+    expensesRef.current = [];
+    transactionsRef.current = [];
+    categoriesRef.current = DEFAULT_CATEGORIES;
+    settingsRef.current = DEFAULT_SETTINGS;
     setAccounts([]);
     setExpenses([]);
     setTransactions([]);

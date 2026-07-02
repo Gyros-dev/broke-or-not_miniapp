@@ -63,4 +63,29 @@ input,
 select,
 textarea {
   font-size: 16px !important;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/*
+  iOS Safari даёт input[type=date] собственную «внутреннюю» ширину и поля у
+  значения, из-за чего поле вылезает за контейнер, игнорируя width:100%.
+  Убираем нативное оформление и внешние отступы значения, чтобы поле
+  умещалось в родителя.
+*/
+input[type='date'] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+}
+
+input[type='date']::-webkit-date-and-time-value {
+  margin: 0;
+  text-align: left;
+}
+
+input[type='date']::-webkit-calendar-picker-indicator {
+  margin-left: auto;
 }
