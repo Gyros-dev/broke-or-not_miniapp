@@ -29,7 +29,7 @@ const RECURRENCE_LABELS: Record<Recurrence, string> = {
   custom: 'Произвольная дата',
 };
 
-const INTERVAL_MONTH_OPTIONS = [2, 3, 6, 12, 18, 24];
+const INTERVAL_MONTH_OPTIONS = [2, 3, 6];
 
 /** Подпись периодичности для списка: для интервала — с конкретным N. */
 function recurrenceLabel(expense: ExpenseItem): string {
