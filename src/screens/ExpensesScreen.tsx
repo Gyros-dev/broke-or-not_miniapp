@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ListChecks, Pencil, Plus, Search } from 'lucide-react';
+import { ListChecks, Pencil, Plus, Search, X } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
 import { Card } from '../components/ui/Card';
@@ -12,8 +12,13 @@ import { StatusBadge } from '../components/ui/StatusBadge';
 import { formatMoney } from '../utils/format';
 import { computeExpenseStatus } from '../utils/expenseStatus';
 import { COMMON_CURRENCIES } from '../services/currency';
-import { ACCOUNT_COLORS, CATEGORY_ICONS } from '../constants';
+import { ACCOUNT_COLORS, CATEGORY_ICONS, DEFAULT_CATEGORIES } from '../constants';
+import { confirmAction } from '../telegram/webapp';
 import type { Category, ExpenseItem, Recurrence } from '../types';
+
+function isCustomCategory(category: Category): boolean {
+  return !DEFAULT_CATEGORIES.some((dc) => dc.id === category.id);
+}
 
 const RECURRENCE_LABELS: Record<Recurrence, string> = {
   once: 'Разовый',
@@ -32,7 +37,7 @@ function ExpenseForm({
     data: Omit<ExpenseItem, 'id' | 'createdAt' | 'lastPaidAt'>,
   ) => void;
 }) {
-  const { categories, accounts, addCategory } = useData();
+  const { categories, accounts, addCategory, deleteCategory } = useData();
   const [title, setTitle] = useState(initial?.title ?? '');
   const [amount, setAmount] = useState(String(initial?.amount ?? ''));
   const [currency, setCurrency] = useState(initial?.currency ?? 'USD');
@@ -44,6 +49,15 @@ function ExpenseForm({
   );
   const [accountId, setAccountId] = useState(initial?.accountId ?? accounts[0]?.id ?? '');
   const [addingCategory, setAddingCategory] = useState(false);
+
+  const handleDeleteCategory = async (cat: Category) => {
+    const confirmed = await confirmAction(`Удалить категорию «${cat.name}»?`);
+    if (!confirmed) return;
+    await deleteCategory(cat.id);
+    if (category === cat.id) {
+      setCategory(categories.find((c) => c.id !== cat.id)?.id ?? '');
+    }
+  };
 
   const needsDueDay = recurrence === 'monthly' || recurrence === 'weekly';
   const needsDueDate = recurrence === 'once' || recurrence === 'custom' || recurrence === 'yearly';
@@ -94,23 +108,40 @@ function ExpenseForm({
             Категория
           </label>
           <div className="flex flex-wrap gap-2">
-            {categories.map((c) => (
-              <button
-                key={c.id}
-                onClick={() =>
-                  c.id === 'other' ? setAddingCategory(true) : setCategory(c.id)
-                }
-                className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium"
-                style={{
-                  background: category === c.id ? `${c.color}33` : 'var(--tg-bg)',
-                  color: category === c.id ? c.color : 'var(--tg-hint)',
-                }}
-              >
-                <Icon name={c.icon} size={14} />
-                {c.name}
-                {c.id === 'other' && <Plus size={12} />}
-              </button>
-            ))}
+            {categories.map((c) => {
+              const deletable = isCustomCategory(c);
+              return (
+                <div
+                  key={c.id}
+                  className="flex items-center overflow-hidden rounded-full"
+                  style={{ background: category === c.id ? `${c.color}33` : 'var(--tg-bg)' }}
+                >
+                  <button
+                    onClick={() =>
+                      c.id === 'other' ? setAddingCategory(true) : setCategory(c.id)
+                    }
+                    className="flex items-center gap-1.5 py-1.5 pl-3 text-[13px] font-medium"
+                    style={{
+                      color: category === c.id ? c.color : 'var(--tg-hint)',
+                      paddingRight: deletable ? 4 : 12,
+                    }}
+                  >
+                    <Icon name={c.icon} size={14} />
+                    {c.name}
+                    {c.id === 'other' && <Plus size={12} />}
+                  </button>
+                  {deletable && (
+                    <button
+                      onClick={() => handleDeleteCategory(c)}
+                      aria-label={`Удалить категорию ${c.name}`}
+                      className="flex h-full items-center py-1.5 pr-2.5 pl-1 text-[var(--tg-hint)]"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
