@@ -186,7 +186,7 @@ export function AccountsScreen({
           {accounts.map((account) => (
             <SwipeableRow
               key={account.id}
-              actions={[
+              rightActions={[
                 {
                   key: 'edit',
                   label: 'Изменить',

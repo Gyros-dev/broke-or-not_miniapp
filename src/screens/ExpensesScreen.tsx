@@ -441,7 +441,7 @@ export function ExpensesScreen() {
               return (
                 <SwipeableRow
                   key={expense.id}
-                  actions={[
+                  leftActions={[
                     status === 'paid'
                       ? {
                           key: 'unpay',
@@ -457,6 +457,8 @@ export function ExpensesScreen() {
                           bg: '#34c759',
                           onClick: () => markExpensePaid(expense.id),
                         },
+                  ]}
+                  rightActions={[
                     {
                       key: 'edit',
                       label: 'Изменить',
